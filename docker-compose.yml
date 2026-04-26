@@ -108,6 +108,15 @@ services:
       - postgres_users
     command: python src/worker.py
 
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8082:80"
+
 volumes:
   postgres_users_data:
   postgres_calendar_data:

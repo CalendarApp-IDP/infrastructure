@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-calendar-pvc
+  namespace: app
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-calendar
+  namespace: app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-calendar
+  template:
+    metadata:
+      labels:
+        app: postgres-calendar
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          env:
+            - name: POSTGRES_DB
+              value: calendar_db
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              value: postgres123
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-calendar-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-calendar
+  namespace: app
+spec:
+  selector:
+    app: postgres-calendar
+  ports:
+    - port: 5432

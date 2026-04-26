@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: calendar
+  namespace: app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: calendar
+  template:
+    metadata:
+      labels:
+        app: calendar
+    spec:
+      containers:
+        - name: calendar
+          image: alinioan/calendar-service:latest
+          command: ["python"]
+          args: ["src/app.py"]
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: app-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: calendar
+  namespace: app
+spec:
+  selector:
+    app: calendar
+  ports:
+    - port: 5000

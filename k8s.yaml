@@ -1,0 +1,282 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: calendar-app
+
+---
+# DATABASES
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-users-pvc
+  namespace: calendar-app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-users
+  namespace: calendar-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-users
+  template:
+    metadata:
+      labels:
+        app: postgres-users
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          env:
+            - name: POSTGRES_DB
+              value: users_db
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              value: postgres123
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-users-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-users
+  namespace: calendar-app
+spec:
+  ports:
+    - port: 5432
+  selector:
+    app: postgres-users
+
+---
+# REDIS
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: calendar-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: calendar-app
+spec:
+  ports:
+    - port: 6379
+  selector:
+    app: redis
+
+---
+# RABBITMQ
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq
+  namespace: calendar-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:3.12-management
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              value: guest
+            - name: RABBITMQ_DEFAULT_PASS
+              value: guest
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: calendar-app
+spec:
+  ports:
+    - name: amqp
+      port: 5672
+    - name: ui
+      port: 15672
+  selector:
+    app: rabbitmq
+
+---
+# KEYCLOAK
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: calendar-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:23.0
+          args: ["start-dev"]
+          env:
+            - name: KEYCLOAK_ADMIN
+              value: admin
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              value: admin
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: calendar-app
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      nodePort: 30080
+  selector:
+    app: keycloak
+
+---
+# PROFILE SERVICE
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: profile
+  namespace: calendar-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: profile
+  template:
+    metadata:
+      labels:
+        app: profile
+    spec:
+      containers:
+        - name: profile
+          image: alinioan/profile-service:latest
+          ports:
+            - containerPort: 5000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: profile
+  namespace: calendar-app
+spec:
+  type: NodePort
+  ports:
+    - port: 5000
+      nodePort: 30002
+  selector:
+    app: profile
+
+---
+# CALENDAR SERVICE
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: calendar
+  namespace: calendar-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: calendar
+  template:
+    metadata:
+      labels:
+        app: calendar
+    spec:
+      containers:
+        - name: calendar
+          image: alinioan/calendar-service:latest
+          ports:
+            - containerPort: 5000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: calendar
+  namespace: calendar-app
+spec:
+  type: NodePort
+  ports:
+    - port: 5000
+      nodePort: 30000
+  selector:
+    app: calendar
+
+---
+# WORKER
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: calendar-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+        - name: worker
+          image: alinioan/suggestion-worker:latest
+          command: ["python", "src/worker.py"]

@@ -272,6 +272,22 @@ services:
     deploy:
       replicas: 1
 
+  portainer:
+    image: portainer/portainer-ce:latest
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - app-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints: [node.role == manager]
+
 networks:
   app-net:
     driver: overlay
@@ -286,6 +302,7 @@ volumes:
   postgres_users_data:
   postgres_calendar_data:
   postgres_keycloak_data:
+  portainer_data:
 
 configs:
   keycloak-realm-config:

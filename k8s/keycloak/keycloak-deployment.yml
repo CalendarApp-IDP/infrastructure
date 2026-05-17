@@ -16,7 +16,7 @@ spec:
       containers:
         - name: keycloak
           image: quay.io/keycloak/keycloak:23.0
-          args: ["start-dev"]
+          args: ["start-dev", "--import-realm"]
           env:
             - name: KEYCLOAK_ADMIN
               value: admin
@@ -32,3 +32,11 @@ spec:
               value: postgres123
           ports:
             - containerPort: 8080
+          volumeMounts:
+            - name: realm-config
+              mountPath: /opt/keycloak/data/import/realm-config.json
+              subPath: realm-config.json
+      volumes:
+        - name: realm-config
+          configMap:
+            name: realm-config

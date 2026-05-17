@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-config
+  namespace: app
+data:
+  kong.yml: |
+    _format_version: "3.0"
+
+    services:
+      - name: profile
+        url: http://profile:5000
+        routes:
+          - name: profile-route
+            paths:
+              - /profile
+
+      - name: calendar
+        url: http://calendar:5000
+        routes:
+          - name: groups-route
+            paths:
+              - /groups
+          - name: events-route
+            paths:
+              - /events
+          - name: recommendations-route
+            paths:
+              - /recommendations
+          - name: health-route
+            paths:
+              - /health

@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   postgres_users:
     image: postgres:15-alpine
@@ -14,6 +16,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager] # Recommended for persistent data services
 
   postgres_calendar:
     image: postgres:15-alpine
@@ -31,6 +37,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
 
   postgres_keycloak:
     image: postgres:15-alpine
@@ -47,6 +57,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
 
   keycloak:
     image: quay.io/keycloak/keycloak:23.0
@@ -65,8 +79,10 @@ services:
       - "8080:8080"
     networks:
       - app-net
-    depends_on:
-      - postgres_keycloak
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
 
   redis:
     image: redis:7-alpine
@@ -95,16 +111,20 @@ services:
       restart_policy:
         condition: on-failure
 
+  # MICROSERVICES
   profile:
     image: alinioan/profile-service:latest
     env_file: .env
     ports:
       - "5002:5000"
     networks:
-      - app-net
-      - profile-net
-    depends_on:
-      - postgres_users
+      app-net:
+        aliases:
+          - profile_service
+      profile-net:
+        aliases:
+          - profile_service
+    command: sh -c "sleep 2 && python src/app.py"
     deploy:
       replicas: 1
       restart_policy:
@@ -116,18 +136,150 @@ services:
     ports:
       - "5000:5000"
     networks:
-      - app-net
-    depends_on:
-      - postgres_calendar
+      app-net:
+        aliases:
+          - calendar_service
+    command: sh -c "sleep 2 && python src/app.py"
     deploy:
       replicas: 3
       restart_policy:
         condition: on-failure
 
+  worker:
+    image: alinioan/suggestion-worker:latest
+    env_file: .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+    networks:
+      worker-net:
+        aliases:
+          - suggestion_worker
+      profile-net:
+        aliases:
+          - suggestion_worker
+    command: sh -c "sleep 2 && python src/worker.py"
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8082:80"
+    networks:
+      - app-net
+    deploy:
+      replicas: 1
+
+  # API GATEWAY (KONG)
+  kong:
+    image: kong:3.7
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_PLUGINS: bundled,prometheus
+    configs:
+      - source: kong-config
+        target: /kong/kong.yml
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+      - "8443:8443"
+    networks:
+      - app-net
+      - monitor-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  # MONITORING
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    configs:
+      - source: prometheus-config
+        target: /etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - monitor-net
+    deploy:
+      replicas: 1
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    networks:
+      - monitor-net
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    deploy:
+      mode: global
+      restart_policy:
+        condition: on-failure
+
+  # LOGGING
+  loki:
+    image: grafana/loki:latest
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    networks:
+      - monitor-net
+    deploy:
+      replicas: 1
+
+  promtail:
+    image: grafana/promtail:latest
+    command: -config.file=/etc/promtail/config.yml
+    configs:
+      - source: promtail-config
+        target: /etc/promtail/config.yml
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - monitor-net
+    deploy:
+      mode: global
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - monitor-net
+    deploy:
+      replicas: 1
+
 networks:
   app-net:
     driver: overlay
   profile-net:
+    driver: overlay
+  worker-net:
+    driver: overlay
+  monitor-net:
     driver: overlay
 
 volumes:
@@ -137,4 +289,10 @@ volumes:
 
 configs:
   keycloak-realm-config:
-    external: true
+    file: ./keycloak/realm-config.json
+  kong-config:
+    file: ./kong/kong.yml
+  prometheus-config:
+    file: ./monitoring/prometheus.yml
+  promtail-config:
+    file: ./monitoring/promtail.yml

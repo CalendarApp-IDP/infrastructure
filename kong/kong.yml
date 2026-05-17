@@ -1,0 +1,159 @@
+_format_version: "3.0"
+
+services:
+  # PROFILE SERVICE
+  - name: profile-service
+    url: http://profile_service:5000
+    routes:
+      - name: profile-routes
+        paths:
+          - /profile
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+
+      - name: profile-health
+        paths:
+          - /profile/health
+        strip_path: false
+        methods:
+          - GET
+
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+          headers:
+            - Authorization
+            - Content-Type
+          credentials: true
+          max_age: 3600
+
+      - name: rate-limiting
+        config:
+          minute: 200
+          policy: local
+
+
+  # CALENDAR SERVICE
+  - name: calendar-service
+    url: http://calendar_service:5000
+
+    routes:
+      # GROUP ROUTES
+      - name: groups-routes
+        paths:
+          - /groups
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+
+      # EVENTS ROUTES
+      - name: events-routes
+        paths:
+          - /events
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+
+      # RECOMMENDATIONS ROUTES
+      - name: recommendations-routes
+        paths:
+          - /recommendations
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - OPTIONS
+
+      # HEALTHCHECK
+      - name: calendar-health
+        paths:
+          - /health
+        strip_path: false
+        methods:
+          - GET
+
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+          headers:
+            - Authorization
+            - Content-Type
+          credentials: true
+          max_age: 3600
+
+      - name: rate-limiting
+        config:
+          minute: 500
+          policy: local
+
+  
+  # PGADMIN
+  - name: pgadmin-service
+    url: http://pgadmin:80
+
+    routes:
+      - name: pgadmin-route
+        paths:
+          - /pgadmin
+        strip_path: true
+        methods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - PATCH
+          - OPTIONS
+
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - PATCH
+            - OPTIONS
+          headers:
+            - Authorization
+            - Content-Type
+          credentials: true
+
+# OPTIONAL GLOBAL PLUGINS
+plugins:
+  - name: prometheus
+
+  - name: file-log
+    config:
+      path: /tmp/kong-access.log
